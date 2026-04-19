@@ -73,18 +73,6 @@ class AnimationLoader:
         return frames
 
 
-def _find_bubble_asset():
-    """Find user-provided bubble asset in project root."""
-    candidates = [
-        os.path.join(PROJECT_DIR, '聊天气泡.png'),
-        os.path.join(PROJECT_DIR, 'bubble.png'),
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-    return None
-
-
 def _load_default_font(size):
     """Load a usable font for bubble text."""
     font_candidates = [
@@ -149,9 +137,11 @@ def _wrap_text_for_width(draw, text, font, max_width):
 def build_bubble_image(message, max_width=220):
     """Build a PIL image for the toast bubble using the user asset when available."""
     message = (message or '').strip()
-    bubble_path = _find_bubble_asset()
+    bubble_path = next((p for p in [os.path.join(SCRIPT_DIR, 'chat_bubble.png'),
+                                     os.path.join(SCRIPT_DIR, 'bubble.png')]
+                        if os.path.exists(p)), None)
 
-    if bubble_path and os.path.exists(bubble_path):
+    if bubble_path:
         bubble = Image.open(bubble_path).convert('RGBA')
     else:
         bubble = Image.new('RGBA', (256, 128), (255, 255, 255, 0))
@@ -161,20 +151,31 @@ def build_bubble_image(message, max_width=220):
 
     bubble = ImageOps.contain(bubble, (max_width, max(64, int(max_width * bubble.height / bubble.width))), Image.NEAREST)
 
-    font_size = max(12, bubble.height // 7)
+    # Detect the actual opaque bubble region to position text correctly
+    alpha = bubble.getchannel('A')
+    content_box = alpha.getbbox()  # (left, top, right, bottom) of opaque area
+    if content_box:
+        cb_left, cb_top, cb_right, cb_bottom = content_box
+    else:
+        cb_left, cb_top, cb_right, cb_bottom = 0, 0, bubble.width, bubble.height
+    content_w = cb_right - cb_left
+    content_h = cb_bottom - cb_top
+
+    font_size = max(12, content_h // 6)
     font = _load_default_font(font_size)
     draw = ImageDraw.Draw(bubble)
 
-    pad_left = max(12, bubble.width // 16)
-    pad_right = max(16, bubble.width // 10)
-    pad_top = max(8, bubble.height // 10)
-    pad_bottom = max(20, bubble.height // 3)
-    text_area_width = max(36, bubble.width - pad_left - pad_right)
+    # Padding relative to the opaque bubble region, not the full image
+    inner_pad_x = max(6, content_w // 14)
+    inner_pad_top = max(4, content_h // 12)
+    inner_pad_bottom = max(12, content_h // 4)
+    text_area_width = max(36, content_w - inner_pad_x * 2)
 
     lines = _wrap_text_for_width(draw, message, font, text_area_width)
     ascent, descent = font.getmetrics() if hasattr(font, 'getmetrics') else (font_size, font_size // 4)
     line_height = max(font_size, ascent + descent)
-    max_lines = max(1, (bubble.height - pad_top - pad_bottom) // line_height)
+    usable_h = content_h - inner_pad_top - inner_pad_bottom
+    max_lines = max(1, usable_h // line_height)
     if len(lines) > max_lines:
         lines = lines[:max_lines]
         if lines:
@@ -184,12 +185,12 @@ def build_bubble_image(message, max_width=220):
             lines[-1] = (last + '…') if last else '…'
 
     total_text_height = len(lines) * line_height
-    y = pad_top + max(0, (bubble.height - pad_top - pad_bottom - total_text_height) // 2)
+    y = cb_top + inner_pad_top + max(0, (usable_h - total_text_height) // 2) - 3
 
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font)
         text_width = bbox[2] - bbox[0]
-        x = pad_left + (text_area_width - text_width) / 2
+        x = cb_left + inner_pad_x + (text_area_width - text_width) / 2
         draw.text((x, y), line, font=font, fill=(32, 32, 32, 255))
         y += line_height
 
@@ -307,6 +308,7 @@ if sys.platform == 'darwin':
 
             # Load skin
             self.load_skin(skin_name)
+            self.available_skins = SkinLoader.list_skins()
 
             # Get screen size
             from AppKit import NSScreen, NSWindowCollectionBehaviorCanJoinAllSpaces, NSWindowCollectionBehaviorStationary
@@ -392,6 +394,29 @@ if sys.platform == 'darwin':
                     """Accept first mouse click"""
                     return True
 
+                def rightMouseDown_(self, event):
+                    from AppKit import NSMenu, NSMenuItem, NSApp
+
+                    menu = NSMenu.alloc().init()
+                    pet = self.window().delegate()  # Assuming the window’s delegate is MacPet instance
+
+                    for skin_name in pet.available_skins:  # preload this in MacPet.__init__
+                        item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                            skin_name,
+                            'changeSkin:',
+                            ''
+                        )
+                        item.setTarget_(pet)
+                        item.setRepresentedObject_(skin_name)
+                        menu.addItem_(item)
+
+                    menu.addItem_(NSMenuItem.separatorItem())
+                    quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('Quit', 'terminate:', '')
+                    menu.addItem_(quit_item)
+
+                    NSApp.activateIgnoringOtherApps_(True)
+                    NSMenu.popUpContextMenu_withEvent_forView_(menu, event, self)
+
             # Create draggable view
             self.content_view = DraggableImageView.alloc().initWithFrame_(
                 NSMakeRect(0, 0, self.display_width, self.display_height)
@@ -461,10 +486,6 @@ if sys.platform == 'darwin':
                 # Convert to NSImage with proper alpha handling
                 ns_images = []
                 for pil_img in scaled_frames:
-                    # Ensure RGBA mode for transparency
-                    if pil_img.mode != 'RGBA':
-                        pil_img = pil_img.convert('RGBA')
-
                     # Convert PIL to PNG bytes (PNG preserves alpha channel)
                     png_buffer = io.BytesIO()
                     pil_img.save(png_buffer, format='PNG')
@@ -513,10 +534,6 @@ if sys.platform == 'darwin':
             """Show toast message above pet"""
             from AppKit import NSImageView
 
-            with open('/tmp/pet_toast_debug.log', 'a') as f:
-                f.write(f"[DEBUG] show_toast called with: {message}\n")
-                f.flush()
-
             if self.toast_window:
                 self.toast_window.orderOut_(None)
                 self.toast_window = None
@@ -562,10 +579,6 @@ if sys.platform == 'darwin':
             self.toast_window.setContentView_(self.toast_label)
             self.toast_window.orderFrontRegardless()
 
-            with open('/tmp/pet_toast_debug.log', 'a') as f:
-                f.write(f"[DEBUG] Toast window shown at ({toast_x}, {toast_y}) size={bubble_info['size']} tail={bubble_info['tail_tip']}\n")
-                f.flush()
-
             self.toast_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
                 3.0,
                 self,
@@ -587,6 +600,13 @@ if sys.platform == 'darwin':
         def run(self):
             """Run the application"""
             AppHelper.runEventLoop()
+        
+        def changeSkin_(self, sender):
+            skin_name = sender.representedObject()
+            print(f"Changing skin to: {skin_name}")
+            self.load_skin(skin_name)
+            self.current_state = 'idle'
+            self.frame_idx = 0
 
 # ============================================================================
 # Windows Implementation - tkinter with transparentcolor
@@ -626,6 +646,7 @@ else:
             self.label.bind('<Button-1>', lambda e: setattr(self, '_d', (e.x, e.y)))
             self.label.bind('<B1-Motion>', self._drag)
             self.label.bind('<Double-1>', lambda e: (self.root.destroy(), os._exit(0)))
+            self.label.bind('<Button-3>', self._on_right_click)
 
             # Animation state
             self.current_state = 'idle'
@@ -765,6 +786,24 @@ else:
         def run(self):
             """Run the application (already in mainloop)"""
             pass
+        
+        def _on_right_click(self, event):
+            # Build a dynamic menu of all available skins
+            menu = tk.Menu(self.root, tearoff=0)
+            for skin_name in SkinLoader.list_skins():
+                menu.add_command(
+                    label=skin_name,
+                    command=lambda name=skin_name: self._change_skin(name)
+                )
+            menu.add_separator()
+            menu.add_command(label="Quit", command=lambda: (self.root.destroy(), os._exit(0)))
+            menu.tk_popup(event.x_root, event.y_root)
+
+        def _change_skin(self, skin_name):
+            print(f"Changing skin to: {skin_name}")
+            self.load_skin(skin_name)
+            self.current_state = 'idle'
+            self.frame_idx = 0
 
 if __name__ == '__main__':
     # Singleton: if port already in use, another instance is running

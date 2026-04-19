@@ -205,6 +205,7 @@ Agent 会自动配好。如果你电脑上没有 Git，它也会帮你下载 por
 | 能力 | 对 Agent 说 | 说明 |
 |------|-----------|------|
 | **Web 工具解锁** | `执行 web setup sop，解锁 web 工具` | 注入浏览器插件，使 Agent 能直接操控网页 |
+| **浏览器 MCP 服务** | `查看你的代码，告诉我 mcp_server_browser.py 怎么启动` | 把真实浏览器能力暴露给支持 MCP 的客户端 |
 
 解锁后，Agent 可以在**保留你登录态**的真实浏览器中操作：
 
@@ -212,6 +213,15 @@ Agent 会自动配好。如果你电脑上没有 Git，它也会帮你下载 por
 打开淘宝，搜索 iPhone 16，按价格排序
 去 B 站，查看我最近看过的历史视频
 ```
+
+如果你要接入 Claude Desktop、Codex CLI 等 MCP 客户端，可在项目根目录直接运行：
+
+```bash
+pip install -r requirements-mcp.txt
+python mcp_server_browser.py
+```
+
+默认使用 MCP `stdio` 传输，并暴露标签页列举、切换、新建、页面扫描与 JS 执行工具。
 
 ### 进阶能力
 

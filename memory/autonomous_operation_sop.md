@@ -1,6 +1,7 @@
 # 自主行动 SOP
 
 ⚠️ **路径警告**：autonomous_reports 在 temp/ 下，用`./autonomous_reports/`访问，**不是**`../memory/autonomous_reports/`或`../autonomous_reports/`！TODO在cwd下。
+⚠️ **导入警告**：若在 `./` 直接 `import helper` 失败，改用 `from autonomous_operation_sop.helper import *`，或用 `importlib` 显式加载 `../memory/autonomous_operation_sop/helper.py`，不要盲重试。
 报告存于 `./autonomous_reports/`，文件名 `RXX_简短描述.md`（XX从 history.txt 推断自增）。
 
 授权你进行自主行动，只要不对环境造成副作用都可进行。

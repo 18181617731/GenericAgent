@@ -6,7 +6,7 @@
 </div>
 
 <p align="center">
-  <a href="#english">English</a> | <a href="#chinese">中文</a>
+  <a href="#english">English</a> | <a href="#chinese">中文</a> | 📄 <a href="assets/GenericAgent_Technical_Report.pdf">Technical Report</a>
 </p>
 
 ---
@@ -87,6 +87,17 @@ cp mykey_template.py mykey.py
 # 4. Launch
 python launch.pyw
 ```
+
+#### Method 2: Browser MCP Server
+
+Use this when you want to expose GenericAgent's real-browser automation as an MCP server for Claude Desktop, Codex CLI, or other MCP clients.
+
+```bash
+pip install -r requirements-mcp.txt
+python mcp_server_browser.py
+```
+
+The server exposes `list_tabs`, `select_tab`, `new_tab`, `scan_page`, and `execute_js` over MCP `stdio`. Before starting it, run the browser unlock flow once (`web setup sop`) so TMWebDriver already has connected tabs.
 
 Full guide: [GETTING_STARTED.md](GETTING_STARTED.md)
 
@@ -279,6 +290,17 @@ cp mykey_template.py mykey.py
 # 4. 启动
 python launch.pyw
 ```
+
+#### 方法二：浏览器 MCP 服务
+
+当你想把 GenericAgent 的真实浏览器自动化能力接到 Claude Desktop、Codex CLI 或其他 MCP 客户端时，启动这个独立服务：
+
+```bash
+pip install -r requirements-mcp.txt
+python mcp_server_browser.py
+```
+
+该服务通过 MCP `stdio` 暴露 `list_tabs`、`select_tab`、`new_tab`、`scan_page`、`execute_js` 五个工具。启动前请先按 `web setup sop` 完成浏览器接入，并确保 TMWebDriver 已连上至少一个标签页。
 
 完整引导流程见 [GETTING_STARTED.md](GETTING_STARTED.md)。
 
